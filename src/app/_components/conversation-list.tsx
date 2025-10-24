@@ -111,7 +111,7 @@ export function ConversationList({ conversations: initialConversations }: Conver
     try {
       await navigator.clipboard.writeText(shareUrl);
       toast.success('Link copied to clipboard!');
-    } catch (error) {
+    } catch {
       toast.error('Failed to copy link');
     }
   };
@@ -269,7 +269,7 @@ export function ConversationList({ conversations: initialConversations }: Conver
           <DialogHeader>
             <DialogTitle>Delete Conversation</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete "{selectedConversation?.title}"? This action cannot be undone.
+              Are you sure you want to delete &quot;{selectedConversation?.title}&quot;? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

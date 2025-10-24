@@ -37,7 +37,15 @@ export default async function AppLayout() {
     .eq("profileId", profile?.id);
 
   // Map database fields (snake_case) to component props (camelCase)
-  const videos = (videosData || []).map((video: any) => ({
+  const videos = (videosData || []).map((video: {
+    id: string;
+    youtube_id: string;
+    title: string;
+    thumbnail_url: string;
+    status: 'QUEUED' | 'PROCESSING' | 'READY' | 'FAILED';
+    created_at: string;
+    updated_at: string;
+  }) => ({
     id: video.id,
     youtubeId: video.youtube_id,
     title: video.title,

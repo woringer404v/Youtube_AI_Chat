@@ -81,7 +81,7 @@ async function fetchYouTubeTranscript(videoId: string): Promise<YouTubeVideoData
     const body = transcript.content?.body;
 
     // Helper function to process a TranscriptSegmentList
-    const processSegmentList = (segmentList: any) => {
+    const processSegmentList = (segmentList: { initial_segments?: Array<{ type?: string; snippet?: { text?: string }; start_ms?: string | number; end_ms?: string | number }> }) => {
       if (segmentList.initial_segments && Array.isArray(segmentList.initial_segments)) {
         for (const segment of segmentList.initial_segments) {
           // Only process TranscriptSegment types (skip TranscriptSectionHeader)
@@ -131,9 +131,10 @@ async function fetchYouTubeTranscript(videoId: string): Promise<YouTubeVideoData
       thumbnailUrl
     };
 
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error(`❌ Error fetching YouTube transcript for ${videoId}:`, error);
-    throw new Error(`Failed to fetch transcript: ${error.message}`);
+    throw new Error(`Failed to fetch transcript: ${errorMessage}`);
   }
 }
 
@@ -266,9 +267,10 @@ const ingestVideo = inngest.createFunction(
       try {
         await client.collections.add({ collection_name: collectionName });
         console.log(`✅ Created ZeroEntropy collection: ${collectionName}`);
-      } catch (error: any) {
+      } catch (error: unknown) {
         // Collection might already exist, which is fine
-        if (!error.message?.includes('already exists')) {
+        const errorMessage = error instanceof Error ? error.message : '';
+        if (!errorMessage.includes('already exists')) {
           throw error;
         }
         console.log(`ℹ️ Collection ${collectionName} already exists`);
@@ -302,9 +304,11 @@ const ingestVideo = inngest.createFunction(
           if (embeddedCount % 10 === 0) {
             console.log(`   Progress: ${embeddedCount}/${chunks.length} chunks embedded`);
           }
-        } catch (error: any) {
+        } catch (error: unknown) {
           // If document already exists, skip it
-          if (error.message?.includes('already exists') || error.status === 409) {
+          const errorMessage = error instanceof Error ? error.message : '';
+          const errorStatus = error && typeof error === 'object' && 'status' in error ? (error as { status: number }).status : 0;
+          if (errorMessage.includes('already exists') || errorStatus === 409) {
             console.log(`   ⏭️ Skipping existing chunk: ${chunk.path}`);
             embeddedCount++;
           } else {
@@ -363,14 +367,15 @@ const ingestVideo = inngest.createFunction(
       }
     };
 
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       // Update video status to FAILED with the error reason
       await step.run("update-status-to-failed", async () => {
         await supabase
           .from("videos")
           .update({
             status: "FAILED",
-            failure_reason: error.message || 'Unknown error during ingestion',
+            failure_reason: errorMessage,
             updated_at: new Date().toISOString(),
           })
           .eq("id", videoId);

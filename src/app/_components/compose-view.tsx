@@ -147,7 +147,7 @@ export function ComposeView({ videoDetailsMap }: ComposeViewProps) {
     try {
       await navigator.clipboard.writeText(generatedContent);
       toast.success('Copied to clipboard');
-    } catch (error) {
+    } catch {
       toast.error('Failed to copy');
     }
   };
@@ -214,7 +214,7 @@ export function ComposeView({ videoDetailsMap }: ComposeViewProps) {
               </Button>
             </>
           ) : (
-            <span className="text-sm text-muted-foreground">No videos selected. Click "All Videos" or select from the right sidebar.</span>
+            <span className="text-sm text-muted-foreground">No videos selected. Click &quot;All Videos&quot; or select from the right sidebar.</span>
           )}
         </div>
       )}

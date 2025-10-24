@@ -81,7 +81,13 @@ export async function GET(
       if (videosError) {
         console.error('Error fetching videos:', videosError);
       } else {
-        videos = (videosData || []).map((video: any) => ({
+        videos = (videosData || []).map((video: {
+          id: string;
+          youtube_id: string;
+          title: string;
+          thumbnail_url: string;
+          status: string;
+        }) => ({
           id: video.id,
           youtubeId: video.youtube_id,
           title: video.title,
@@ -102,10 +108,11 @@ export async function GET(
       videoIds,
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('Error fetching conversation:', error);
     return new Response(
-      JSON.stringify({ error: 'Internal server error', message: error.message }),
+      JSON.stringify({ error: 'Internal server error', message: errorMessage }),
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }
@@ -158,10 +165,11 @@ export async function PATCH(
 
     return Response.json({ success: true });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('Error updating conversation:', error);
     return new Response(
-      JSON.stringify({ error: 'Internal server error', message: error.message }),
+      JSON.stringify({ error: 'Internal server error', message: errorMessage }),
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }
@@ -228,10 +236,11 @@ export async function DELETE(
 
     return Response.json({ success: true });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('Error deleting conversation:', error);
     return new Response(
-      JSON.stringify({ error: 'Internal server error', message: error.message }),
+      JSON.stringify({ error: 'Internal server error', message: errorMessage }),
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }

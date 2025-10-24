@@ -120,11 +120,13 @@ export async function POST(req: Request) {
           console.log(`   Found ${snippetResponse.results.length} chunks`);
           allResults.push(...snippetResponse.results);
         }
-      } catch (error: any) {
-        if (error.message?.includes('not found') || error.status === 404) {
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : '';
+        const errorStatus = error && typeof error === 'object' && 'status' in error ? (error as { status: number }).status : 0;
+        if (errorMessage.includes('not found') || errorStatus === 404) {
           console.log(`   ⚠️ Collection ${collectionName} not found`);
         } else {
-          console.error(`   ❌ Error querying ${collectionName}:`, error.message);
+          console.error(`   ❌ Error querying ${collectionName}:`, errorMessage);
         }
       }
     }
@@ -199,10 +201,11 @@ Generate the content based on the above context. Do not include citations or ref
       },
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('Compose API error:', error);
     return new Response(
-      JSON.stringify({ error: 'Internal server error', message: error.message }),
+      JSON.stringify({ error: 'Internal server error', message: errorMessage }),
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }

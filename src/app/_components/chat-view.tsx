@@ -177,7 +177,7 @@ export function ChatView({ videoDetailsMap }: ChatViewProps) {
               </Button>
             </>
           ) : (
-            <span className="text-sm text-muted-foreground">No videos selected. Click "All Videos" or select from the right sidebar.</span>
+            <span className="text-sm text-muted-foreground">No videos selected. Click &quot;All Videos&quot; or select from the right sidebar.</span>
           )}
         </div>
       )}

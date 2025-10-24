@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { inngest } from "@/app/api/inngest/route";
 import { google } from 'googleapis';
+import createCuid from 'cuid';
 
 // Helper to extract YouTube video ID
 function extractVideoId(url: string): string | null {
@@ -96,13 +97,14 @@ async function getChannelVideos(channelInfo: { type: 'id' | 'handle', value: str
     }
 
     return videoIds;
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('Error fetching channel videos:', error);
-    throw new Error(`Failed to fetch channel videos: ${error.message}`);
+    throw new Error(`Failed to fetch channel videos: ${errorMessage}`);
   }
 }
 
-export async function requestIngestion(_prevState: any, formData: FormData) {
+export async function requestIngestion(_prevState: unknown, formData: FormData) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -139,7 +141,6 @@ export async function requestIngestion(_prevState: any, formData: FormData) {
       }
       const profileId = profile.id;
 
-      const cuid = require("cuid");
       let ingestedCount = 0;
       let skippedCount = 0;
 
@@ -159,7 +160,7 @@ export async function requestIngestion(_prevState: any, formData: FormData) {
           continue;
         }
 
-        const newId = cuid();
+        const newId = createCuid();
 
         // Insert the video
         const { data: newVideo, error } = await supabase
@@ -204,9 +205,10 @@ export async function requestIngestion(_prevState: any, formData: FormData) {
         message: `Success: Queued ${ingestedCount} videos from channel for ingestion!${skippedCount > 0 ? ` (${skippedCount} already existed)` : ''}`
       };
 
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error("Channel ingestion error:", error);
-      return { message: `Error: ${error.message}` };
+      return { message: `Error: ${errorMessage}` };
     }
   }
 
@@ -230,8 +232,7 @@ try {
     }
     const profileId = profile.id; // This is the correct ID to use
 
-    const cuid = require("cuid");
-    const newId = cuid();
+    const newId = createCuid();
 
     // Step 2: Insert the video with the fetched profileId.
     const { data: newVideo, error } = await supabase
@@ -261,15 +262,16 @@ try {
       },
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Ingestion request error:", error);
 
     // Handle duplicate video error with user-friendly message
-    if (error.code === '23505' && error.message?.includes('videos_youtube_id_key')) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === '23505') {
       return { message: "Error: This video is already in your library!" };
     }
 
-    return { message: `Error: ${error.message}` };
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return { message: `Error: ${errorMessage}` };
   }
 
   revalidatePath("/"); // Refresh the data on the page
@@ -340,8 +342,9 @@ export async function retryFailedVideo(videoId: string) {
     revalidatePath("/");
     return { success: true, message: "Success: Video retry initiated!" };
 
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error("Retry video error:", error);
-    return { success: false, message: `Error: ${error.message}` };
+    return { success: false, message: `Error: ${errorMessage}` };
   }
 }

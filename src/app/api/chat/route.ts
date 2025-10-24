@@ -3,6 +3,7 @@ import { streamText } from 'ai';
 import { anthropic } from '@ai-sdk/anthropic';
 import ZeroEntropy from 'zeroentropy';
 import { createClient } from '@/lib/supabase/server'; // 👈 ADDED: Import Supabase server client
+import createCuid from 'cuid';
 
 // Prevent serverless function timeout
 export const maxDuration = 30;
@@ -82,8 +83,8 @@ export async function POST(req: Request) {
     let userQuery = '';
     if (lastMessage.parts && Array.isArray(lastMessage.parts)) {
       userQuery = lastMessage.parts
-        .filter((part: any) => part.type === 'text')
-        .map((part: any) => part.text)
+        .filter((part: { type: string }) => part.type === 'text')
+        .map((part: { type: string; text?: string }) => part.text || '')
         .join(' ');
     } else if (typeof lastMessage.content === 'string') {
       // Fallback for older message format
@@ -127,12 +128,14 @@ export async function POST(req: Request) {
           console.log(`   Found ${snippetResponse.results.length} chunks in ${collectionName}`);
           allResults.push(...snippetResponse.results);
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         // If collection doesn't exist for this video, skip it
-        if (error.message?.includes('not found') || error.status === 404) {
+        const errorMessage = error instanceof Error ? error.message : '';
+        const errorStatus = error && typeof error === 'object' && 'status' in error ? (error as { status: number }).status : 0;
+        if (errorMessage.includes('not found') || errorStatus === 404) {
           console.log(`   ⚠️ Collection ${collectionName} not found (video may not be ingested yet)`);
         } else {
-          console.error(`   ❌ Error querying ${collectionName}:`, error.message);
+          console.error(`   ❌ Error querying ${collectionName}:`, errorMessage);
         }
       }
     }
@@ -198,19 +201,19 @@ CONTEXT FROM VIDEO TRANSCRIPTS:
 ${context}`;
 
     // Convert messages to the format expected by streamText
-    const conversationHistory = messages.map((msg: any) => {
+    const conversationHistory = messages.map((msg: { role: string; parts?: Array<{ type: string; text?: string }>; content?: string }) => {
       let content = '';
       if (msg.parts && Array.isArray(msg.parts)) {
         content = msg.parts
-          .filter((part: any) => part.type === 'text')
-          .map((part: any) => part.text)
+          .filter((part: { type: string }) => part.type === 'text')
+          .map((part: { type: string; text?: string }) => part.text || '')
           .join(' ');
       } else if (typeof msg.content === 'string') {
         content = msg.content;
       }
 
       return {
-        role: msg.role,
+        role: msg.role as 'user' | 'assistant',
         content,
       };
     });
@@ -226,7 +229,6 @@ ${context}`;
       onFinish: async ({ text }) => {
         // This code runs *after* the entire response has streamed to the client
         console.log('✅ Stream finished. Saving conversation to database...');
-        const cuid = require('cuid'); // 👈 **1. Import/Require cuid**
 
         try {
           let activeConversationId = conversationId;
@@ -234,7 +236,7 @@ ${context}`;
           // If no conversationId provided, create a new conversation (first message)
           if (!activeConversationId && messages.length === 1) {
             // **👇 2. Generate ID before insert**
-            const newConversationId = cuid();
+            const newConversationId = createCuid();
             console.log(`   Generating new conversation ID: ${newConversationId}`);
 
             // 1. Create a new conversation record
@@ -252,7 +254,7 @@ ${context}`;
             console.log(`   Created new conversation with ID: ${activeConversationId}`);
 
             // 2. Link the selected videos to this conversation
-            const links = scopedVideoIds.map((videoId: string) => ({
+            const links = (scopedVideoIds as string[]).map((videoId: string) => ({
               A: activeConversationId,
               B: videoId
             }));
@@ -264,15 +266,15 @@ ${context}`;
           // Save messages (for both new and existing conversations)
           if (activeConversationId) {
             const messagesToSave = [
-              { id: cuid(), conversationId: activeConversationId, role: 'user', content: userQuery },
-              { id: cuid(), conversationId: activeConversationId, role: 'assistant', content: text },
+              { id: createCuid(), conversationId: activeConversationId, role: 'user', content: userQuery },
+              { id: createCuid(), conversationId: activeConversationId, role: 'assistant', content: text },
             ];
             const { error: msgError } = await supabase.from('messages').insert(messagesToSave);
             if (msgError) throw new Error(`Failed to save messages: ${msgError.message}`);
             console.log(`   Saved user and assistant messages to conversation ${activeConversationId}.`);
           }
 
-        } catch (saveError: any) {
+        } catch (saveError: unknown) {
           console.error('❌ Error saving conversation to database:', saveError);
         }
       },
@@ -285,10 +287,11 @@ ${context}`;
     // Return streaming response
     return result.toUIMessageStreamResponse();
 
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('Chat API error:', error);
     return new Response(
-      JSON.stringify({ error: 'Internal server error', message: error.message }),
+      JSON.stringify({ error: 'Internal server error', message: errorMessage }),
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }
