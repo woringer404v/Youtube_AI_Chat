@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
-import { inngest } from "@/app/api/inngest/route";
+import { inngest } from "@/lib/inngest/client";
 import { google } from 'googleapis';
 import createCuid from 'cuid';
 

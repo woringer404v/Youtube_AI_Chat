@@ -1,12 +1,9 @@
 // src/app/api/inngest/route.ts
-import { Inngest } from "inngest";
 import { serve } from "inngest/next";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import ZeroEntropy from "zeroentropy";
 import { Innertube } from "youtubei.js";
-
-// Create a client to send and receive events
-export const inngest = new Inngest({ id: "knowledge-canvas" });
+import { inngest } from "@/lib/inngest/client";
 
 // Initialize ZeroEntropy client
 function getZeroEntropyClient(): ZeroEntropy {
