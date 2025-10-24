@@ -47,7 +47,6 @@ export function KnowledgeBaseExplorer({ videos: initialVideos, metrics }: { vide
   // Set up real-time subscription for video updates
   useEffect(() => {
     const supabase = createClient();
-    let refreshTimeout: NodeJS.Timeout | null = null;
 
     console.log('🔌 Setting up real-time subscription for videos table...');
 
@@ -62,16 +61,13 @@ export function KnowledgeBaseExplorer({ videos: initialVideos, metrics }: { vide
           table: 'videos',
         },
         (payload) => {
-          console.log('🔄 Video change detected:', payload.eventType);
+          console.log('🔄 Video change detected:', payload);
+          console.log('Event type:', payload.eventType);
+          console.log('New data:', payload.new);
+          console.log('Refreshing page to fetch latest data...');
 
-          // Debounce refresh to avoid multiple rapid calls
-          if (refreshTimeout) {
-            clearTimeout(refreshTimeout);
-          }
-          refreshTimeout = setTimeout(() => {
-            console.log('Refreshing page to fetch latest data...');
-            router.refresh();
-          }, 1000); // Wait 1 second before refreshing
+          // Refresh the router to get updated data from the server
+          router.refresh();
         }
       )
       .subscribe((status) => {
@@ -80,9 +76,6 @@ export function KnowledgeBaseExplorer({ videos: initialVideos, metrics }: { vide
 
     return () => {
       console.log('🔌 Cleaning up real-time subscription');
-      if (refreshTimeout) {
-        clearTimeout(refreshTimeout);
-      }
       supabase.removeChannel(channel);
     };
   }, [router]);
@@ -95,8 +88,7 @@ export function KnowledgeBaseExplorer({ videos: initialVideos, metrics }: { vide
     }
   }, [initialVideos]);
 
-  // Fallback: Poll for updates every 10 seconds if we have PROCESSING videos
-  // (Real-time subscription should handle most updates, this is just a backup)
+  // Fallback: Poll for updates every 5 seconds if we have PROCESSING videos
   useEffect(() => {
     const hasProcessingVideos = videos.some(v => v.status === 'PROCESSING' || v.status === 'QUEUED');
 
@@ -106,7 +98,7 @@ export function KnowledgeBaseExplorer({ videos: initialVideos, metrics }: { vide
     const interval = setInterval(() => {
       console.log('🔄 Polling for updates...');
       router.refresh();
-    }, 10000); // Poll every 10 seconds (reduced from 5)
+    }, 5000); // Poll every 5 seconds
 
     return () => {
       console.log('⏱️ Stopping polling');

@@ -10,7 +10,6 @@ import { Sheet, SheetContent, SheetTitle, SheetDescription, SheetTrigger } from 
 import { Button } from '@/components/ui/button';
 import { Menu, LibraryBig, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
-import { ErrorBoundary } from './error-boundary';
 
 // Define the type for our video object
 type Video = {
@@ -61,9 +60,8 @@ export function ClientLayout({ videos, videoDetailsMap, children, chatView, metr
   };
 
   return (
-    <ErrorBoundary>
-      <ModelProvider>
-        <ScopeProvider>
+    <ModelProvider>
+      <ScopeProvider>
         <main className="h-screen w-full">
         {/* Desktop Layout (hidden on mobile/tablet) */}
         <div className={`hidden h-full lg:grid ${getGridTemplate()}`}>
@@ -157,6 +155,5 @@ export function ClientLayout({ videos, videoDetailsMap, children, chatView, metr
       </main>
       </ScopeProvider>
     </ModelProvider>
-    </ErrorBoundary>
   );
 }
