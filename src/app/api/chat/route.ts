@@ -193,8 +193,8 @@ Content: ${text}
 IMPORTANT INSTRUCTIONS:
 1.  Base your entire answer STRICTLY on the provided context.
 2.  If the answer is not in the context, state: "I don't have information about that in the provided video transcripts." Do NOT use outside knowledge.
-3.  **For EACH piece of information or claim you make, immediately cite the source chunk it came from using the format [video_id, time] right after the sentence or point. where video_id and time are the respective values**
-4.  If multiple chunks support a single point, cite them all immediately after, like this: [video_id1, time1] [video_id2, time2].
+3.  **For EACH piece of information or claim you make, immediately cite the source chunk it came from using the format [video_id, time] right after the sentence or point. where video_id and time are the respective values. Do not put video: or time: or timestamp: before, put directly the values in that format.**
+4.  If multiple chunks support a single point, cite them all immediately after, like this: [video_id1, time1] [video_id2, time2]. Do not put video: or time: or timestamp: before, put directly the values in that format.
 5.  Be concise and accurate. Do not add introductory or concluding remarks not derived from the context.
 
 CONTEXT FROM VIDEO TRANSCRIPTS:

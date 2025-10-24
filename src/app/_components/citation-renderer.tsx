@@ -12,7 +12,6 @@ export function CitationRenderer({ text, videos }: CitationRendererProps) {
   // 👇 FINAL, FINAL Regex: Matches "[video_id: ID_VALUE, time: TIMESTAMP_VALUE]"
   // Captures the ID_VALUE (group 1) and the TIMESTAMP_VALUE (group 2)
   const citationRegex = /\[video_id:\s*([\w-]+),\s*time:\s*(\d+(?:\.\d*)?)s?\]/g;
-
   const elements: Array<{ key: string; element: React.ReactNode }> = [];
   let lastIndex = 0;
   let citationCounter = 1; // Start citation numbering at 1
