@@ -4,6 +4,7 @@ import { createServiceRoleClient } from "@/lib/supabase/server";
 import ZeroEntropy from "zeroentropy";
 import { Innertube } from "youtubei.js";
 import { inngest } from "@/lib/inngest/client";
+import { google } from 'googleapis';
 
 // Initialize ZeroEntropy client
 function getZeroEntropyClient(): ZeroEntropy {
@@ -12,6 +13,42 @@ function getZeroEntropyClient(): ZeroEntropy {
     throw new Error('ZERO_ENTROPY_API_KEY environment variable is not set');
   }
   return new ZeroEntropy({ apiKey });
+}
+
+// Fallback function to fetch video metadata from YouTube Data API
+async function fetchVideoMetadata(videoId: string): Promise<{ title: string; thumbnailUrl: string }> {
+  const apiKey = process.env.YOUTUBE_API_KEY;
+  if (!apiKey) {
+    console.warn('⚠️ YOUTUBE_API_KEY not set, skipping metadata fallback');
+    return { title: 'Unknown Title', thumbnailUrl: '' };
+  }
+
+  try {
+    const youtube = google.youtube({ version: 'v3', auth: apiKey });
+    const response = await youtube.videos.list({
+      part: ['snippet'],
+      id: [videoId],
+    });
+
+    const video = response.data.items?.[0];
+    if (!video) {
+      return { title: 'Unknown Title', thumbnailUrl: '' };
+    }
+
+    const title = video.snippet?.title || 'Unknown Title';
+    const thumbnailUrl = video.snippet?.thumbnails?.high?.url ||
+                         video.snippet?.thumbnails?.medium?.url ||
+                         video.snippet?.thumbnails?.default?.url ||
+                         `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+
+    return { title, thumbnailUrl };
+  } catch (error) {
+    console.error('Error fetching metadata from YouTube API:', error);
+    return {
+      title: 'Unknown Title',
+      thumbnailUrl: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
+    };
+  }
 }
 
 // YouTube transcript fetcher using youtubei.js
@@ -52,8 +89,17 @@ async function fetchYouTubeTranscript(videoId: string): Promise<YouTubeVideoData
     console.log('[3/4] Video info fetched successfully');
 
     // Extract video metadata
-    const title = videoInfo.basic_info?.title || 'Unknown Title';
-    const thumbnailUrl = videoInfo.basic_info?.thumbnail?.[0]?.url || '';
+    let title = videoInfo.basic_info?.title || '';
+    let thumbnailUrl = videoInfo.basic_info?.thumbnail?.[0]?.url || '';
+
+    // If metadata is missing, use YouTube Data API as fallback
+    if (!title || title === 'Unknown Title' || !thumbnailUrl) {
+      console.log('⚠️ Metadata missing from youtubei.js, trying YouTube Data API fallback...');
+      const metadata = await fetchVideoMetadata(videoId);
+      title = metadata.title;
+      thumbnailUrl = metadata.thumbnailUrl;
+    }
+
     console.log(`   Video title: ${title}`);
     console.log(`   Thumbnail URL: ${thumbnailUrl}`);
 
