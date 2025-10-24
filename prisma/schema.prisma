@@ -1,0 +1,81 @@
+// This is your Prisma schema file.
+// Learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Profile {
+  id        String    @id @default(uuid())
+  userId    String    @unique // Foreign key to auth.users.id
+  email     String    @unique
+  name      String?
+  avatarUrl String?   @map("avatar_url")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  videos        Video[]
+  conversations Conversation[]
+
+  @@map("profiles")
+}
+
+model Video {
+  id            String          @id @default(cuid())
+  youtubeId     String          @unique @map("youtube_id")
+  title         String
+  thumbnailUrl  String          @map("thumbnail_url")
+  status        IngestionStatus @default(QUEUED)
+  failureReason String?         @map("failure_reason")
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+
+  profileId String
+  profile   Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  // This defines the many-to-many relationship for conversation scope
+  conversations Conversation[]
+
+  @@map("videos")
+}
+
+enum IngestionStatus {
+  QUEUED
+  PROCESSING
+  READY
+  FAILED
+}
+
+model Conversation {
+  id        String   @id @default(cuid())
+  title     String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  profileId String
+  profile   Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  messages  Message[]
+  // The list of videos that define the context for this conversation
+  scope     Video[]
+
+  @@map("conversations")
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  role      String   // "user" or "assistant"
+  content   String
+  // Store citations or other metadata as JSON
+  metadata  Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@map("messages")
+}
