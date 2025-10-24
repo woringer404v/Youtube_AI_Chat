@@ -52,7 +52,7 @@ export default async function LoginPage({
   return (
     <div className="flex h-screen w-full items-center justify-center bg-background">
       <div className="w-full max-w-md rounded-lg border p-6 shadow-md">
-        <h1 className="mb-4 text-2xl font-bold">Welcome to Knowledge Canvas</h1>
+        <h1 className="mb-4 text-2xl font-bold">Welcome to Youtube AI Chat</h1>
         <p className="mb-6 text-muted-foreground">
           Sign in via magic link with your email below
         </p>
