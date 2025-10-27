@@ -10,6 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useActionState, useEffect, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Toaster, toast } from 'sonner';
+import { useScrollbarVisibility } from '@/hooks/use-scrollbar-visibility';
 import { requestIngestion, retryFailedVideo } from '@/app/actions';
 import Image from 'next/image';
 import { useScope } from '../_context/scope-context';
@@ -43,6 +44,17 @@ export function KnowledgeBaseExplorer({ videos: initialVideos, metrics }: { vide
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(initialVideos.length === 0);
   const [selectedVideos, setSelectedVideos] = useState<string[]>([]);
+  const [, setCurrentTime] = useState(Date.now());
+  const scrollContainerRef = useScrollbarVisibility<HTMLDivElement>();
+
+  // Update current time every minute to keep relative timestamps fresh
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(Date.now());
+    }, 60000); // Update every minute
+
+    return () => clearInterval(interval);
+  }, []);
 
   // Set up real-time subscription for video updates
   useEffect(() => {
@@ -160,14 +172,18 @@ export function KnowledgeBaseExplorer({ videos: initialVideos, metrics }: { vide
   const formatLastIngestion = (timestamp: string | null) => {
     if (!timestamp) return 'Never';
 
-    // Parse timestamp - handle both ISO strings and ensure UTC interpretation
-    const date = new Date(timestamp);
+    // FIX: Supabase returns timestamps without 'Z' suffix, which makes JavaScript
+    // interpret them as local time instead of UTC. We need to add 'Z' to force UTC parsing.
+    const utcTimestamp = timestamp.endsWith('Z') ? timestamp : `${timestamp}Z`;
+
+    // Parse timestamp as UTC
+    const date = new Date(utcTimestamp);
     const now = new Date();
 
     // Calculate difference in milliseconds
     const diffMs = now.getTime() - date.getTime();
 
-    // If difference is negative or very small, something is wrong
+    // If difference is negative, something is wrong
     if (diffMs < 0) return date.toLocaleDateString();
 
     const diffMins = Math.floor(diffMs / 60000);
@@ -243,7 +259,7 @@ export function KnowledgeBaseExplorer({ videos: initialVideos, metrics }: { vide
         </CardContent>
       </Card>
 
-      <div className="flex-1 overflow-y-auto">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto custom-scrollbar">
         <div className="mb-4 space-y-2">
           <h2 className="text-lg font-semibold tracking-tight">My Videos</h2>
 

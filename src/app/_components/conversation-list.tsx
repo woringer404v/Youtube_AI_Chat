@@ -3,9 +3,10 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { createClient } from '@/lib/supabase/client';
+import { useScrollbarVisibility } from '@/hooks/use-scrollbar-visibility';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,6 +31,7 @@ type Conversation = {
   id: string;
   title: string;
   created_at: string;
+  updated_at: string;
 };
 
 interface ConversationListProps {
@@ -38,12 +40,14 @@ interface ConversationListProps {
 
 export function ConversationList({ conversations: initialConversations }: ConversationListProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const [conversations, setConversations] = useState<Conversation[]>(initialConversations);
   const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [newTitle, setNewTitle] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const scrollContainerRef = useScrollbarVisibility<HTMLDivElement>();
 
   // Update local state when initial conversations change
   useEffect(() => {
@@ -68,13 +72,18 @@ export function ConversationList({ conversations: initialConversations }: Conver
           if (payload.eventType === 'INSERT') {
             const newConv = payload.new as Conversation;
             setConversations((current) => [newConv, ...current]);
+
+            // If we're on the home page, navigate to the new conversation
+            if (pathname === '/') {
+              router.push(`/chat/${newConv.id}`);
+            }
           } else if (payload.eventType === 'UPDATE') {
             const updatedConv = payload.new as Conversation;
-            setConversations((current) =>
-              current.map((conv) =>
-                conv.id === updatedConv.id ? updatedConv : conv
-              )
-            );
+            setConversations((current) => {
+              // Remove the updated conversation and add it to the top (most recent)
+              const filtered = current.filter((conv) => conv.id !== updatedConv.id);
+              return [updatedConv, ...filtered];
+            });
           } else if (payload.eventType === 'DELETE') {
             const deletedConv = payload.old as Conversation;
             setConversations((current) =>
@@ -169,13 +178,17 @@ export function ConversationList({ conversations: initialConversations }: Conver
 
   return (
     <>
-      <div className="flex-1 space-y-2 overflow-y-auto">
+      <div ref={scrollContainerRef} className="flex-1 space-y-2 overflow-y-auto custom-scrollbar">
         {conversations.length > 0 ? (
-          conversations.map((conv) => (
+          conversations.map((conv) => {
+            const isActive = pathname === `/chat/${conv.id}`;
+            return (
             <div key={conv.id} className="group relative flex items-center min-w-0">
               <Button
                 variant="ghost"
-                className="w-full justify-start text-left group-hover:pr-12 pr-2 transition-all min-w-0"
+                className={`w-full justify-start text-left group-hover:pr-12 pr-2 transition-all min-w-0 ${
+                  isActive ? 'bg-accent' : ''
+                }`}
                 asChild
               >
                 <Link href={`/chat/${conv.id}`} className="block min-w-0">
@@ -217,7 +230,8 @@ export function ConversationList({ conversations: initialConversations }: Conver
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
-          ))
+            );
+          })
         ) : (
           <p className="p-2 text-sm text-muted-foreground">No conversations yet.</p>
         )}

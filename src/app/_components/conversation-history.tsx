@@ -9,6 +9,7 @@ type Conversation = {
   id: string;
   title: string;
   created_at: string; // Comes as string from DB
+  updated_at: string; // Track last interaction time
 };
 
 export async function ConversationHistory() {
@@ -26,9 +27,9 @@ export async function ConversationHistory() {
   if (profile) {
     const { data } = await supabase
       .from('conversations')
-      .select('id, title, created_at')
+      .select('id, title, created_at, updated_at')
       .eq('profileId', profile.id)
-      .order('created_at', { ascending: false });
+      .order('updated_at', { ascending: false });
     conversations = data || [];
   }
 

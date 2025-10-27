@@ -5,13 +5,14 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { SendHorizonal, X, Search } from 'lucide-react';
 import { useScope } from '@/app/_context/scope-context';
 import { Badge } from '@/components/ui/badge';
 import { CitationRenderer } from '@/app/_components/citation-renderer';
 import { createClient } from '@/lib/supabase/client';
+import { useScrollbarVisibility } from '@/hooks/use-scrollbar-visibility';
 
 interface ConversationViewProps {
   conversationId: string;
@@ -33,6 +34,7 @@ export function ConversationView({
 }: ConversationViewProps) {
   const { scopedVideos, setScopedVideos, scopeMode, setScopeMode, allVideos, setAllVideos } = useScope();
   const [input, setInput] = useState('');
+  const scrollContainerRef = useScrollbarVisibility<HTMLDivElement>();
 
   // Initialize allVideos from videoDetailsMap
   useEffect(() => {
@@ -125,6 +127,13 @@ export function ConversationView({
     };
   }, [conversationId, setMessages]);
 
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+    }
+  }, [messages]);
+
   // Detect when we're waiting for response
   const isWaitingForResponse = useMemo(() => {
     if (messages.length === 0) return false;
@@ -166,128 +175,139 @@ export function ConversationView({
   // Function to switch to subset mode
   const switchToSubset = () => {
     setScopeMode('subset');
-    // Keep current selection
+    setScopedVideos([]); // Clear selection when switching to subset mode
   };
 
   return (
-    <div className="flex flex-col p-4">
-      {/* --- Mode Toggle --- */}
-      <div className="mb-4 flex items-center gap-2">
-        <span className="text-sm font-medium text-muted-foreground">Scope:</span>
-        <div className="flex gap-1 border rounded-md p-1">
-          <Button
-            variant={scopeMode === 'all' ? 'default' : 'ghost'}
-            size="sm"
-            onClick={resetToAll}
-            className="h-7 text-xs"
-          >
-            All Videos
-          </Button>
-          <Button
-            variant={scopeMode === 'subset' ? 'default' : 'ghost'}
-            size="sm"
-            onClick={switchToSubset}
-            className="h-7 text-xs"
-          >
-            Subset
-          </Button>
+    <div className="flex flex-col h-full">
+      {/* Fixed Header Section */}
+      <div className="flex-shrink-0 p-4 space-y-4">
+        {/* --- Mode Toggle --- */}
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-muted-foreground">Scope:</span>
+          <div className="flex gap-1 border rounded-md p-1">
+            <Button
+              variant={scopeMode === 'all' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={resetToAll}
+              className="h-7 text-xs"
+            >
+              All Videos
+            </Button>
+            <Button
+              variant={scopeMode === 'subset' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={switchToSubset}
+              className="h-7 text-xs"
+            >
+              Subset
+            </Button>
+          </div>
         </div>
-      </div>
-      {/* --- END: Mode Toggle --- */}
+        {/* --- END: Mode Toggle --- */}
 
-      {/* --- Scope Bar --- */}
-      {scopeMode === 'subset' && (
-        <div className="mb-4 flex flex-wrap items-center gap-2 border-b pb-2 dark:border-slate-700">
-          <span className="text-sm font-medium text-muted-foreground">Context:</span>
-          {scopedVideos.length > 0 ? (
-            <>
-              {scopedVideos.map((videoId) => (
-                <Badge key={videoId} variant="secondary" className="flex items-center gap-1">
-                  {videoDetailsMap[videoId]?.title || `Video ${videoId.substring(0, 5)}...`}
-                  <button
-                    onClick={() => removeVideoFromScope(videoId)}
-                    className="ml-1 rounded-full p-0.5 hover:bg-muted-foreground/20"
-                    aria-label={`Remove video ${videoId} from context`}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              ))}
-              <Button variant="ghost" size="sm" onClick={resetToAll} className="ml-auto h-7 text-xs">
-                Reset to All
-              </Button>
-            </>
-          ) : (
-            <span className="text-sm text-muted-foreground">No videos selected. Click &quot;All Videos&quot; or select from the right sidebar.</span>
-          )}
-        </div>
-      )}
-      {/* --- END: Scope Bar --- */}
-
-      <div className="flex-1 mb-4">
-        <div className="space-y-6 pr-4">
-            {messages.length > 0 ? (
+        {/* --- Scope Bar --- */}
+        {scopeMode === 'subset' && (
+          <div className="flex flex-wrap items-center gap-2 pb-2">
+            <span className="text-sm font-medium text-muted-foreground">Context:</span>
+            {scopedVideos.length > 0 ? (
               <>
-                {messages.map((m) => {
-                  const textContent = m.parts
-                    .filter((part) => part.type === 'text')
-                    .map((part) => ('text' in part ? part.text : ''))
-                    .join('');
+                {scopedVideos.map((videoId) => (
+                  <Badge key={videoId} variant="secondary" className="flex items-center gap-1">
+                    {videoDetailsMap[videoId]?.title || `Video ${videoId.substring(0, 5)}...`}
+                    <button
+                      onClick={() => removeVideoFromScope(videoId)}
+                      className="ml-1 rounded-full p-0.5 hover:bg-muted-foreground/20"
+                      aria-label={`Remove video ${videoId} from context`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+                <Button variant="ghost" size="sm" onClick={resetToAll} className="ml-auto h-7 text-xs">
+                  Reset to All
+                </Button>
+              </>
+            ) : (
+              <span className="text-sm text-muted-foreground">No videos selected. Click &quot;All Videos&quot; or select from the right sidebar.</span>
+            )}
+          </div>
+        )}
+        {/* --- END: Scope Bar --- */}
+      </div>
 
-                  return (
-                    <div key={m.id} className="flex items-start gap-4">
-                      <Avatar className="h-8 w-8 border">
-                        <AvatarFallback>{m.role === 'user' ? 'U' : 'AI'}</AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1 space-y-2 overflow-hidden">
-                        <p className="font-bold">{m.role === 'user' ? 'You' : 'Assistant'}</p>
-                        <div className="whitespace-pre-wrap">
-                          {m.role === 'assistant' ? (
-                            <CitationRenderer text={textContent} videos={videoDetailsMap} />
-                          ) : (
-                            textContent
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+      {/* Scrollable Conversation Area */}
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-4 custom-scrollbar">
+        <div className="space-y-6 pb-4">
+          {messages.length > 0 ? (
+            <>
+              {messages.map((m) => {
+                const textContent = m.parts
+                  .filter((part) => part.type === 'text')
+                  .map((part) => ('text' in part ? part.text : ''))
+                  .join('');
 
-                {isWaitingForResponse && (
-                  <div className="flex items-start gap-4 animate-pulse">
+                return (
+                  <div key={m.id} className="flex items-start gap-4">
                     <Avatar className="h-8 w-8 border">
-                      <AvatarFallback>AI</AvatarFallback>
+                      <AvatarFallback>{m.role === 'user' ? 'U' : 'AI'}</AvatarFallback>
                     </Avatar>
-                    <div className="flex-1 space-y-2">
-                      <p className="font-bold">Assistant</p>
-                      <div className="flex items-center gap-2 text-muted-foreground">
-                        <Search className="h-4 w-4 animate-spin" />
-                        <span className="text-sm">Searching knowledge base...</span>
+                    <div className="flex-1 space-y-2 overflow-hidden">
+                      <p className="font-bold">{m.role === 'user' ? 'You' : 'Assistant'}</p>
+                      <div className="whitespace-pre-wrap">
+                        {m.role === 'assistant' ? (
+                          <CitationRenderer text={textContent} videos={videoDetailsMap} />
+                        ) : (
+                          textContent
+                        )}
                       </div>
                     </div>
                   </div>
-                )}
-              </>
-            ) : (
-              <div className={`flex h-[calc(100vh-${scopedVideos.length > 0 ? '200px' : '150px'})] items-center justify-center`}>
-                <p className="text-muted-foreground">
-                  {scopedVideos.length > 0
-                    ? 'Continue the conversation...'
-                    : 'Select a video to continue chatting.'}
-                </p>
-              </div>
-            )}
+                );
+              })}
+
+              {isWaitingForResponse && (
+                <div className="flex items-start gap-4 animate-pulse">
+                  <Avatar className="h-8 w-8 border">
+                    <AvatarFallback>AI</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 space-y-2">
+                    <p className="font-bold">Assistant</p>
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Search className="h-4 w-4 animate-spin" />
+                      <span className="text-sm">Searching knowledge base...</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="flex h-full items-center justify-center">
+              <p className="text-muted-foreground">
+                {scopedVideos.length > 0
+                  ? 'Continue the conversation...'
+                  : 'Select a video to continue chatting.'}
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="mt-4">
-        <form onSubmit={handleSubmit} className="flex items-center gap-2">
-          <Input
+      {/* Fixed Input Section */}
+      <div className="flex-shrink-0 p-4">
+        <form onSubmit={handleSubmit} className="flex items-end gap-2">
+          <Textarea
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setInput(e.target.value)}
             placeholder={scopedVideos.length > 0 ? "Continue the conversation..." : "Select videos first..."}
-            className="flex-1"
+            className="flex-1 min-h-[44px] max-h-[200px] resize-none custom-scrollbar"
             disabled={scopedVideos.length === 0}
+            onKeyDown={(e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSubmit(e as unknown as React.FormEvent<HTMLFormElement>);
+              }
+            }}
           />
           <Button type="submit" size="icon" aria-label="Send message" disabled={scopedVideos.length === 0}>
             <SendHorizonal className="h-4 w-4" />

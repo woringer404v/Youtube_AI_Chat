@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { useScrollbarVisibility } from '@/hooks/use-scrollbar-visibility';
 import {
   Select,
   SelectContent,
@@ -62,6 +63,7 @@ export function ComposeView({ videoDetailsMap }: ComposeViewProps) {
   const [generatedContent, setGeneratedContent] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [customPrompt, setCustomPrompt] = useState('');
+  const scrollContainerRef = useScrollbarVisibility<HTMLDivElement>();
 
   // Initialize allVideos from videoDetailsMap
   useEffect(() => {
@@ -89,7 +91,7 @@ export function ComposeView({ videoDetailsMap }: ComposeViewProps) {
   // Function to switch to subset mode
   const switchToSubset = () => {
     setScopeMode('subset');
-    // Keep current selection or clear if none
+    setScopedVideos([]); // Clear selection when switching to subset mode
   };
 
   const handleGenerate = async () => {
@@ -193,7 +195,7 @@ export function ComposeView({ videoDetailsMap }: ComposeViewProps) {
 
       {/* --- Scope Bar --- */}
       {scopeMode === 'subset' && (
-        <div className="mb-4 flex flex-wrap items-center gap-2 border-b pb-2 dark:border-slate-700">
+        <div className="mb-4 flex flex-wrap items-center gap-2 pb-2">
           <span className="text-sm font-medium text-muted-foreground">Context:</span>
           {scopedVideos.length > 0 ? (
             <>
@@ -294,7 +296,7 @@ export function ComposeView({ videoDetailsMap }: ComposeViewProps) {
 
       {/* Generated Content Display */}
       <div className="flex-1 border rounded-lg dark:border-slate-700 overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between border-b p-3 dark:border-slate-700 flex-shrink-0">
+        <div className="flex items-center justify-between p-3 flex-shrink-0">
           <h3 className="text-sm font-medium">Generated Content</h3>
           {generatedContent && (
             <div className="flex gap-2">
@@ -307,7 +309,7 @@ export function ComposeView({ videoDetailsMap }: ComposeViewProps) {
             </div>
           )}
         </div>
-        <div className="p-4 overflow-y-auto flex-1">
+        <div ref={scrollContainerRef} className="p-4 overflow-y-auto flex-1 custom-scrollbar">
           {isGenerating ? (
             <div className="flex items-center gap-2 text-muted-foreground animate-pulse">
               <Sparkles className="h-4 w-4 animate-spin" />

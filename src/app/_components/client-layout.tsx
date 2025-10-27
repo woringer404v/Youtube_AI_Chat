@@ -73,9 +73,9 @@ export function ClientLayout({ videos, videoDetailsMap, children, chatView, metr
           )}
 
           {/* Center - Chat/Compose */}
-          <div className="h-full border-x dark:border-slate-800 relative overflow-y-auto">
+          <div className="h-full border-x dark:border-slate-800 relative flex flex-col overflow-hidden">
             {/* Sidebar Toggle Buttons */}
-            <div className="sticky top-0 left-0 right-0 z-10 flex justify-between gap-2 p-2 bg-background/95 backdrop-blur-sm">
+            <div className="flex-shrink-0 flex justify-between gap-2 p-2 bg-background">
               <Button
                 key="left-sidebar-toggle"
                 variant="ghost"
@@ -97,7 +97,9 @@ export function ClientLayout({ videos, videoDetailsMap, children, chatView, metr
                 {rightSidebarVisible ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
               </Button>
             </div>
-            {chatView || <ChatComposeToggle videoDetailsMap={videoDetailsMap} />}
+            <div className="flex-1 overflow-hidden">
+              {chatView || <ChatComposeToggle videoDetailsMap={videoDetailsMap} />}
+            </div>
           </div>
 
           {/* Right Sidebar - Knowledge Base */}

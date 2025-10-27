@@ -224,6 +224,9 @@ ${context}`;
 
     console.log('🧠 Calling AI model with streamText...');
 
+    // Track the conversation ID that will be returned to client
+    let returnConversationId = conversationId;
+
     // Stream the AI response
     const result = streamText({
       model,
@@ -255,6 +258,7 @@ ${context}`;
 
             if (convError) throw new Error(`Failed to create conversation: ${convError.message}`);
             activeConversationId = newConversationId;
+            returnConversationId = newConversationId;
             console.log(`   Created new conversation with ID: ${activeConversationId}`);
 
             // 2. Link the selected videos to this conversation
@@ -276,6 +280,13 @@ ${context}`;
             const { error: msgError } = await supabase.from('messages').insert(messagesToSave);
             if (msgError) throw new Error(`Failed to save messages: ${msgError.message}`);
             console.log(`   Saved user and assistant messages to conversation ${activeConversationId}.`);
+
+            // Update the conversation's updated_at timestamp to move it to top of history
+            const { error: updateError } = await supabase
+              .from('conversations')
+              .update({ updated_at: new Date().toISOString() })
+              .eq('id', activeConversationId);
+            if (updateError) console.error('Failed to update conversation timestamp:', updateError);
           }
 
         } catch (saveError: unknown) {
@@ -288,8 +299,15 @@ ${context}`;
     console.log('✅ AI stream object created. Returning response to frontend.');
     console.log(result);
 
-    // Return streaming response
-    return result.toUIMessageStreamResponse();
+    // Return streaming response with conversation ID in headers
+    const response = result.toUIMessageStreamResponse();
+
+    // Add conversation ID to response headers so client can navigate to it
+    if (returnConversationId) {
+      response.headers.set('X-Conversation-Id', returnConversationId);
+    }
+
+    return response;
 
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
