@@ -7,13 +7,15 @@ import { DefaultChatTransport } from 'ai';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { SendHorizonal, X, Search, Copy, Check, Edit2, RotateCcw, StopCircle } from 'lucide-react';
+import { SendHorizonal, X, Search, Copy, Check, Edit2, RotateCcw, StopCircle, Mic, Volume2, VolumeX, Pause, Play } from 'lucide-react';
 import { useScope } from '@/app/_context/scope-context';
 import { Badge } from '@/components/ui/badge';
 import { CitationRenderer } from '@/app/_components/citation-renderer';
 import { VideoPreview } from '@/app/_components/video-preview';
 import { createClient } from '@/lib/supabase/client';
 import { useScrollbarVisibility } from '@/hooks/use-scrollbar-visibility';
+import { useSpeechRecognition } from '@/hooks/use-speech-recognition';
+import { useTextToSpeech } from '@/hooks/use-text-to-speech';
 
 interface ConversationViewProps {
   conversationId: string;
@@ -72,6 +74,27 @@ export function ConversationView({
     timestamp: number;
     title: string;
   } | null>(null);
+
+  // Voice input and output
+  const {
+    isListening,
+    transcript,
+    interimTranscript,
+    startListening,
+    stopListening,
+    resetTranscript,
+    isSupported: isSpeechRecognitionSupported,
+  } = useSpeechRecognition({ continuous: false, interimResults: true });
+
+  const [playingMessageId, setPlayingMessageId] = useState<string | null>(null);
+  const { speak, stop: stopSpeaking, pause: pauseSpeaking, resume: resumeSpeaking, isSpeaking, isPaused } = useTextToSpeech();
+
+  // Update input when speech recognition detects text
+  useEffect(() => {
+    if (transcript) {
+      setInput(transcript + interimTranscript);
+    }
+  }, [transcript, interimTranscript]);
 
   // Initialize scoped videos and messages on mount
   useEffect(() => {
@@ -211,6 +234,37 @@ export function ConversationView({
     setIsGenerating(true);
     sendMessage({ role: 'user', parts: [{ type: 'text', text: userMessage }] });
     setInput('');
+    resetTranscript(); // Clear voice input transcript
+  };
+
+  // Handle microphone button click
+  const handleMicClick = () => {
+    if (isListening) {
+      stopListening();
+    } else {
+      resetTranscript();
+      startListening();
+    }
+  };
+
+  // Handle text-to-speech for assistant messages
+  const handlePlayMessage = (messageId: string, text: string) => {
+    if (playingMessageId === messageId && isSpeaking) {
+      if (isPaused) {
+        resumeSpeaking();
+      } else {
+        pauseSpeaking();
+      }
+    } else {
+      stopSpeaking(); // Stop any currently playing message
+      setPlayingMessageId(messageId);
+      speak(text);
+    }
+  };
+
+  const handleStopMessage = () => {
+    stopSpeaking();
+    setPlayingMessageId(null);
   };
 
   // Function to remove a video from the scope (only in subset mode)
@@ -441,6 +495,39 @@ export function ConversationView({
                                 <Copy className="h-3 w-3" />
                               )}
                             </Button>
+                            {m.role === 'assistant' && textContent.trim() && (
+                              <>
+                                {playingMessageId === m.id && isSpeaking ? (
+                                  <>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-8 px-2"
+                                      onClick={() => handlePlayMessage(m.id, textContent)}
+                                    >
+                                      {isPaused ? <Play className="h-3 w-3" /> : <Pause className="h-3 w-3" />}
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-8 px-2"
+                                      onClick={handleStopMessage}
+                                    >
+                                      <VolumeX className="h-3 w-3" />
+                                    </Button>
+                                  </>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-8 px-2"
+                                    onClick={() => handlePlayMessage(m.id, textContent)}
+                                  >
+                                    <Volume2 className="h-3 w-3" />
+                                  </Button>
+                                )}
+                              </>
+                            )}
                             {m.role === 'user' && (
                               <Button
                                 size="sm"
@@ -517,7 +604,7 @@ export function ConversationView({
             onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setInput(e.target.value)}
             placeholder={scopedVideos.length > 0 ? "Continue the conversation..." : "Select videos first..."}
             className="flex-1 min-h-[44px] max-h-[200px] resize-none custom-scrollbar"
-            disabled={scopedVideos.length === 0}
+            disabled={scopedVideos.length === 0 || isListening}
             onKeyDown={(e: React.KeyboardEvent<HTMLTextAreaElement>) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -525,6 +612,19 @@ export function ConversationView({
               }
             }}
           />
+          {isSpeechRecognitionSupported && !isWaitingForResponse && (
+            <Button
+              type="button"
+              size="icon"
+              aria-label={isListening ? "Stop listening" : "Start voice input"}
+              onClick={handleMicClick}
+              variant={isListening ? "destructive" : "outline"}
+              disabled={scopedVideos.length === 0}
+              className={isListening ? "animate-pulse" : ""}
+            >
+              <Mic className="h-4 w-4" />
+            </Button>
+          )}
           {isWaitingForResponse && !isStopped ? (
             <Button
               type="button"
@@ -541,11 +641,21 @@ export function ConversationView({
               <StopCircle className="h-4 w-4" />
             </Button>
           ) : (
-            <Button type="submit" size="icon" aria-label="Send message" disabled={scopedVideos.length === 0}>
+            <Button type="submit" size="icon" aria-label="Send message" disabled={scopedVideos.length === 0 || isListening}>
               <SendHorizonal className="h-4 w-4" />
             </Button>
           )}
         </form>
+        {isListening && (
+          <div className="mt-2 text-sm text-muted-foreground flex items-center gap-2">
+            <div className="flex gap-1">
+              <span className="thinking-dot">•</span>
+              <span className="thinking-dot">•</span>
+              <span className="thinking-dot">•</span>
+            </div>
+            <span>Listening...</span>
+          </div>
+        )}
       </div>
 
       {/* Video Preview Modal */}
