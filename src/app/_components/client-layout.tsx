@@ -97,8 +97,16 @@ export function ClientLayout({ videos, videoDetailsMap, children, chatView, metr
                 {rightSidebarVisible ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
               </Button>
             </div>
-            <div className="flex-1 overflow-hidden">
-              {chatView || <ChatComposeToggle videoDetailsMap={videoDetailsMap} />}
+            <div className="flex-1 overflow-hidden flex items-start justify-center">
+              <div className={`h-full overflow-hidden ${
+                leftSidebarVisible && rightSidebarVisible
+                  ? 'w-full'
+                  : !leftSidebarVisible && !rightSidebarVisible
+                    ? 'w-[70%]'
+                    : 'w-[80%]'
+              }`}>
+                {chatView || <ChatComposeToggle videoDetailsMap={videoDetailsMap} />}
+              </div>
             </div>
           </div>
 
