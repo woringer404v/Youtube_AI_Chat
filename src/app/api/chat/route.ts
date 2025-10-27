@@ -247,12 +247,17 @@ ${context}`;
             console.log(`   Generating new conversation ID: ${newConversationId}`);
 
             // 1. Create a new conversation record
+            // Use first 60 characters of user query as title
+            const title = userQuery.length > 60
+              ? userQuery.substring(0, 60).trim() + '...'
+              : userQuery.trim();
+
             const { error: convError } = await supabase
               .from('conversations')
               .insert({
                 id: newConversationId, // 👈 **3. Provide the generated ID**
                 profileId: profileId,
-                title: userQuery.substring(0, 50) + (userQuery.length > 50 ? '...' : ''), // Auto-generate title
+                title: title,
               })
               .single();
 

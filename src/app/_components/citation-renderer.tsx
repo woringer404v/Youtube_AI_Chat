@@ -6,9 +6,10 @@ import React from 'react';
 interface CitationRendererProps {
   text: string;
   videos: Record<string, { youtubeId: string; title: string }>;
+  onCitationClick?: (videoId: string, youtubeId: string, timestamp: number, title: string) => void;
 }
 
-export function CitationRenderer({ text, videos }: CitationRendererProps) {
+export function CitationRenderer({ text, videos, onCitationClick }: CitationRendererProps) {
   // 👇 FINAL, FINAL Regex: Matches "[video_id: ID_VALUE, time: TIMESTAMP_VALUE]"
   // Captures the ID_VALUE (group 1) and the TIMESTAMP_VALUE (group 2)
   const citationRegex = /\[video_id:\s*([\w-]+),\s*time:\s*(\d+(?:\.\d*)?)s?.*?\]/g;
@@ -41,15 +42,20 @@ export function CitationRenderer({ text, videos }: CitationRendererProps) {
       elements.push({
         key: `citation-${elementCounter++}`,
         element: (
-          <a
-            href={youtubeLink}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="ml-1 inline-block rounded bg-blue-100 px-1.5 py-0.5 text-xs font-semibold text-blue-700 hover:bg-blue-200 dark:bg-blue-900 dark:text-blue-200 dark:hover:bg-blue-800"
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              if (onCitationClick) {
+                onCitationClick(videoId, videoInfo.youtubeId, timestamp, videoInfo.title);
+              } else {
+                window.open(youtubeLink, '_blank');
+              }
+            }}
+            className="ml-1 inline-block rounded bg-blue-100 px-1.5 py-0.5 text-xs font-semibold text-blue-700 hover:bg-blue-200 dark:bg-blue-900 dark:text-blue-200 dark:hover:bg-blue-800 cursor-pointer border-0"
             title={`Go to "${videoInfo.title}" at ${timestamp.toFixed(1)}s`}
           >
             [{currentCitationNumber}] {/* Display clean citation number */}
-          </a>
+          </button>
         )
       });
     } else {

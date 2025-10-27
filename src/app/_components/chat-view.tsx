@@ -7,11 +7,12 @@ import { DefaultChatTransport } from 'ai';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { SendHorizonal, X, Search } from 'lucide-react'; // Import Search icon
+import { SendHorizonal, X, Search, Copy, Check, Edit2, RotateCcw, StopCircle } from 'lucide-react';
 import { useScope } from '../_context/scope-context';
 import { useModel, AVAILABLE_MODELS } from '../_context/model-context';
 import { Badge } from '@/components/ui/badge'; // Import Badge
 import { CitationRenderer } from './citation-renderer';
+import { VideoPreview } from './video-preview';
 import { useScrollbarVisibility } from '@/hooks/use-scrollbar-visibility';
 import {
   Select,
@@ -68,6 +69,7 @@ export function ChatView({ videoDetailsMap, onMessagesChange }: ChatViewProps) {
   // Custom transport with scopedVideos and modelId
   const scopedVideosRef = useRef<string[]>([]);
   const selectedModelIdRef = useRef<string>('');
+  const conversationIdRef = useRef<string | null>(null);
   scopedVideosRef.current = scopedVideos;
   selectedModelIdRef.current = selectedModelId;
 
@@ -76,13 +78,38 @@ export function ChatView({ videoDetailsMap, onMessagesChange }: ChatViewProps) {
       api: '/api/chat',
       body: () => ({
         scopedVideoIds: scopedVideosRef.current,
-        modelId: selectedModelIdRef.current
+        modelId: selectedModelIdRef.current,
+        conversationId: conversationIdRef.current
       }),
+      fetch: async (url, options) => {
+        const response = await fetch(url, options);
+
+        // Extract conversation ID from response headers
+        const convId = response.headers.get('X-Conversation-Id');
+        if (convId && !conversationIdRef.current) {
+          console.log('📌 Captured conversation ID:', convId);
+          conversationIdRef.current = convId;
+          setConversationId(convId);
+        }
+
+        return response;
+      },
     });
   }, []);
 
   const chatHelpers = useChat({ transport });
-  const { messages, sendMessage } = chatHelpers;
+  const { messages, sendMessage, setMessages, stop } = chatHelpers;
+  const [loadingStage, setLoadingStage] = useState<'searching' | 'generating' | null>(null);
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editedContent, setEditedContent] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [videoPreview, setVideoPreview] = useState<{
+    youtubeId: string;
+    timestamp: number;
+    title: string;
+  } | null>(null);
 
   // Notify parent when messages change
   useEffect(() => {
@@ -98,7 +125,7 @@ export function ChatView({ videoDetailsMap, onMessagesChange }: ChatViewProps) {
     }
   }, [messages]);
 
-  // Detect when we're waiting: last message is user OR last assistant message is empty/incomplete
+  // Detect when we're waiting: track based on message state
   const isWaitingForResponse = useMemo(() => {
     if (messages.length === 0) return false;
     const lastMessage = messages[messages.length - 1];
@@ -106,22 +133,63 @@ export function ChatView({ videoDetailsMap, onMessagesChange }: ChatViewProps) {
     // If last message is from user, we're waiting
     if (lastMessage.role === 'user') return true;
 
-    // If last message is from assistant but has no content, we're still loading
-    if (lastMessage.role === 'assistant') {
-      const textContent = lastMessage.parts
-        .filter((part) => part.type === 'text')
-        .map((part) => ('text' in part ? part.text : ''))
-        .join('');
-      return textContent.trim().length === 0;
-    }
+    // If we're actively generating (tracked by state), keep showing stop button
+    if (isGenerating) return true;
 
     return false;
+  }, [messages, isGenerating]);
+
+  // Track if we manually stopped generation
+  const [isStopped, setIsStopped] = useState(false);
+
+  // Simulate loading stages for better UX
+  useEffect(() => {
+    if (isWaitingForResponse && !isStopped) {
+      setLoadingStage('searching');
+      const timer = setTimeout(() => {
+        setLoadingStage('generating');
+      }, 1500); // Switch to "generating" after 1.5s
+      return () => clearTimeout(timer);
+    } else {
+      setLoadingStage(null);
+    }
+  }, [isWaitingForResponse, isStopped]);
+
+  // Reset stopped state and generating state when waiting status changes
+  useEffect(() => {
+    if (!isWaitingForResponse) {
+      setIsStopped(false);
+    }
+  }, [isWaitingForResponse]);
+
+  // Detect when assistant message has been fully received
+  useEffect(() => {
+    if (messages.length > 0) {
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage.role === 'assistant') {
+        const textContent = lastMessage.parts
+          .filter((part) => part.type === 'text')
+          .map((part) => ('text' in part ? part.text : ''))
+          .join('');
+
+        // If assistant message has content, mark generation as complete
+        if (textContent.trim().length > 0) {
+          const timer = setTimeout(() => {
+            setIsGenerating(false);
+          }, 100);
+          return () => clearTimeout(timer);
+        }
+      }
+    }
   }, [messages]);
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!input.trim() || scopedVideos.length === 0) return;
-    sendMessage({ role: 'user', parts: [{ type: 'text', text: input }] });
+
+    const userMessage = input;
+    setIsGenerating(true);
+    sendMessage({ role: 'user', parts: [{ type: 'text', text: userMessage }] });
     setInput('');
   };
 
@@ -142,6 +210,91 @@ export function ChatView({ videoDetailsMap, onMessagesChange }: ChatViewProps) {
   const switchToSubset = () => {
     setScopeMode('subset');
     setScopedVideos([]); // Clear selection when switching to subset mode
+  };
+
+  // Copy message to clipboard
+  const handleCopy = async (content: string, messageId: string) => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopiedMessageId(messageId);
+      setTimeout(() => setCopiedMessageId(null), 2000);
+    } catch (error) {
+      console.error('Failed to copy:', error);
+    }
+  };
+
+  // Start editing a message
+  const handleEdit = (messageId: string, content: string) => {
+    setEditingMessageId(messageId);
+    setEditedContent(content);
+  };
+
+  // Save edited message and regenerate response
+  const handleSaveEdit = (messageId: string) => {
+    if (!editedContent.trim()) return;
+
+    // Find the message index
+    const messageIndex = messages.findIndex(m => m.id === messageId);
+    if (messageIndex === -1) return;
+
+    // Remove all messages after this one
+    const updatedMessages = messages.slice(0, messageIndex);
+    setMessages(updatedMessages);
+
+    // Trigger regeneration with the edited message
+    setIsGenerating(true);
+    sendMessage({ role: 'user', parts: [{ type: 'text', text: editedContent }] });
+
+    setEditingMessageId(null);
+    setEditedContent('');
+  };
+
+  // Cancel editing
+  const handleCancelEdit = () => {
+    setEditingMessageId(null);
+    setEditedContent('');
+  };
+
+  // Regenerate last assistant response
+  const handleRegenerate = () => {
+    if (messages.length < 2) return;
+
+    const lastMessage = messages[messages.length - 1];
+
+    // Only regenerate if the last message is from assistant
+    if (lastMessage.role !== 'assistant') return;
+
+    // Find the last user message before the assistant message
+    let lastUserMessageIndex = -1;
+    for (let i = messages.length - 2; i >= 0; i--) {
+      if (messages[i].role === 'user') {
+        lastUserMessageIndex = i;
+        break;
+      }
+    }
+    if (lastUserMessageIndex === -1) return;
+
+    const lastUserMessage = messages[lastUserMessageIndex];
+
+    // Extract user message content
+    const userContent = lastUserMessage.parts
+      .filter(part => part.type === 'text')
+      .map(part => ('text' in part ? part.text : ''))
+      .join('');
+
+    // Remove both the user message and assistant response
+    const filteredMessages = messages.slice(0, lastUserMessageIndex);
+    setMessages(filteredMessages);
+
+    // Trigger regeneration by sending the user message again
+    // The AI SDK will add it fresh to the messages array
+    setIsGenerating(true);
+    sendMessage({ role: 'user', parts: [{ type: 'text', text: userContent }] });
+  };
+
+  // Handle citation click to show video preview
+  const handleCitationClick = (_videoId: string, youtubeId: string, timestamp: number, title: string) => {
+    setVideoPreview({ youtubeId, timestamp, title });
   };
 
 
@@ -226,45 +379,119 @@ export function ChatView({ videoDetailsMap, onMessagesChange }: ChatViewProps) {
         <div className="space-y-6 pb-4">
           {messages.length > 0 ? (
             <>
-              {messages.map((m) => {
+              {messages.map((m, index) => {
                 const textContent = m.parts
                   .filter((part) => part.type === 'text')
                   .map((part) => ('text' in part ? part.text : ''))
                   .join('');
 
+                const isLastMessage = index === messages.length - 1;
+                const isEditing = editingMessageId === m.id;
+
                 return (
-                  <div key={m.id} className="flex items-start gap-4">
+                  <div key={m.id} className="group flex items-start gap-4">
                     <Avatar className="h-8 w-8 border">
                       <AvatarFallback>{m.role === 'user' ? 'U' : 'AI'}</AvatarFallback>
                     </Avatar>
                     <div className="flex-1 space-y-2 overflow-hidden">
                       <p className="font-bold">{m.role === 'user' ? 'You' : 'Assistant'}</p>
-                      <div className="whitespace-pre-wrap">
-                        {m.role === 'assistant' ? (
-                          <CitationRenderer text={textContent} videos={videoDetailsMap} />
-                        ) : (
-                          textContent
-                        )}
-                      </div>
+                      {isEditing ? (
+                        <div className="space-y-2">
+                          <Textarea
+                            value={editedContent}
+                            onChange={(e) => setEditedContent(e.target.value)}
+                            className="min-h-[100px]"
+                          />
+                          <div className="flex gap-2">
+                            <Button size="sm" onClick={() => handleSaveEdit(m.id)}>
+                              Update
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={handleCancelEdit}>
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="whitespace-pre-wrap">
+                            {m.role === 'assistant' ? (
+                              <CitationRenderer
+                                text={textContent}
+                                videos={videoDetailsMap}
+                                onCitationClick={handleCitationClick}
+                              />
+                            ) : (
+                              textContent
+                            )}
+                          </div>
+                          <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 px-2"
+                              onClick={() => handleCopy(textContent, m.id)}
+                            >
+                              {copiedMessageId === m.id ? (
+                                <Check className="h-3 w-3" />
+                              ) : (
+                                <Copy className="h-3 w-3" />
+                              )}
+                            </Button>
+                            {m.role === 'user' && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-8 px-2"
+                                onClick={() => handleEdit(m.id, textContent)}
+                              >
+                                <Edit2 className="h-3 w-3" />
+                              </Button>
+                            )}
+                            {m.role === 'assistant' && isLastMessage && !isWaitingForResponse && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-8 px-2"
+                                onClick={handleRegenerate}
+                              >
+                                <RotateCcw className="h-3 w-3" />
+                              </Button>
+                            )}
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                 );
               })}
 
-              {/* Show search indicator when waiting for response */}
-              {isWaitingForResponse && (
-                <div className="flex items-start gap-4 animate-pulse">
-                  <Avatar className="h-8 w-8 border">
-                    <AvatarFallback>AI</AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 space-y-2">
-                    <p className="font-bold">Assistant</p>
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <Search className="h-4 w-4 animate-spin" />
-                      <span className="text-sm">Searching knowledge base...</span>
+              {/* Show enhanced loading indicator when waiting for response */}
+              {isWaitingForResponse && !isStopped && (
+                // Only show loading indicator if last message is from user (not assistant)
+                messages.length > 0 && messages[messages.length - 1].role === 'user' ? (
+                  <div className="flex items-start gap-4">
+                    <Avatar className="h-8 w-8 border pulse-avatar">
+                      <AvatarFallback>AI</AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 space-y-2">
+                      <p className="font-bold">Assistant</p>
+                      <div className="flex flex-col gap-2">
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <Search className="h-4 w-4 animate-spin" />
+                          <span className="text-sm">
+                            {loadingStage === 'searching' ? 'Searching knowledge base' : 'Generating response'}
+                          </span>
+                          <div className="flex gap-1">
+                            <span className="thinking-dot">•</span>
+                            <span className="thinking-dot">•</span>
+                            <span className="thinking-dot">•</span>
+                          </div>
+                        </div>
+                        <div className="h-4 shimmer-text rounded" />
+                      </div>
                     </div>
                   </div>
-                </div>
+                ) : null
               )}
             </>
           ) : (
@@ -295,11 +522,38 @@ export function ChatView({ videoDetailsMap, onMessagesChange }: ChatViewProps) {
               }
             }}
           />
-          <Button type="submit" size="icon" aria-label="Send message" disabled={scopedVideos.length === 0}>
-            <SendHorizonal className="h-4 w-4" />
-          </Button>
+          {isWaitingForResponse && !isStopped ? (
+            <Button
+              type="button"
+              size="icon"
+              aria-label="Stop generating"
+              onClick={() => {
+                stop();
+                setIsStopped(true);
+                setIsGenerating(false);
+                setLoadingStage(null);
+              }}
+              variant="destructive"
+            >
+              <StopCircle className="h-4 w-4" />
+            </Button>
+          ) : (
+            <Button type="submit" size="icon" aria-label="Send message" disabled={scopedVideos.length === 0}>
+              <SendHorizonal className="h-4 w-4" />
+            </Button>
+          )}
         </form>
       </div>
+
+      {/* Video Preview Modal */}
+      {videoPreview && (
+        <VideoPreview
+          youtubeId={videoPreview.youtubeId}
+          timestamp={videoPreview.timestamp}
+          title={videoPreview.title}
+          onClose={() => setVideoPreview(null)}
+        />
+      )}
     </div>
   );
 }

@@ -24,7 +24,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { MoreVertical, Pencil, Share2, Trash2 } from 'lucide-react';
+import { MoreVertical, Pencil, Share2, Trash2, Search, FileDown } from 'lucide-react';
 import { toast } from 'sonner';
 
 type Conversation = {
@@ -47,7 +47,14 @@ export function ConversationList({ conversations: initialConversations }: Conver
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [newTitle, setNewTitle] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   const scrollContainerRef = useScrollbarVisibility<HTMLDivElement>();
+
+  // Filter conversations based on search query
+  const filteredConversations = conversations.filter((conv) =>
+    conv.title.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   // Update local state when initial conversations change
   useEffect(() => {
@@ -79,6 +86,7 @@ export function ConversationList({ conversations: initialConversations }: Conver
             }
           } else if (payload.eventType === 'UPDATE') {
             const updatedConv = payload.new as Conversation;
+            console.log('🔄 Conversation updated:', updatedConv.id, 'New title:', updatedConv.title);
             setConversations((current) => {
               // Remove the updated conversation and add it to the top (most recent)
               const filtered = current.filter((conv) => conv.id !== updatedConv.id);
@@ -122,6 +130,43 @@ export function ConversationList({ conversations: initialConversations }: Conver
       toast.success('Link copied to clipboard!');
     } catch {
       toast.error('Failed to copy link');
+    }
+  };
+
+  const handleExportClick = (conv: Conversation, e: React.MouseEvent) => {
+    e.preventDefault();
+    setSelectedConversation(conv);
+    setIsExportDialogOpen(true);
+  };
+
+  const handleExport = async (format: 'txt' | 'md' | 'pdf') => {
+    if (!selectedConversation) return;
+
+    setIsLoading(true);
+    try {
+      const response = await fetch(`/api/conversations/${selectedConversation.id}/export?format=${format}`);
+
+      if (!response.ok) {
+        throw new Error('Failed to export conversation');
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${selectedConversation.title}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast.success(`Conversation exported as ${format.toUpperCase()}`);
+      setIsExportDialogOpen(false);
+    } catch (error) {
+      toast.error('Failed to export conversation');
+      console.error('Error exporting conversation:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -178,9 +223,21 @@ export function ConversationList({ conversations: initialConversations }: Conver
 
   return (
     <>
+      {/* Search Bar */}
+      <div className="mb-3 relative">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          type="text"
+          placeholder="Search conversations..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+
       <div ref={scrollContainerRef} className="flex-1 space-y-2 overflow-y-auto custom-scrollbar">
-        {conversations.length > 0 ? (
-          conversations.map((conv) => {
+        {filteredConversations.length > 0 ? (
+          filteredConversations.map((conv) => {
             const isActive = pathname === `/chat/${conv.id}`;
             return (
             <div key={conv.id} className="group relative flex items-center min-w-0">
@@ -218,6 +275,10 @@ export function ConversationList({ conversations: initialConversations }: Conver
                   <DropdownMenuItem onClick={(e) => handleShareClick(conv, e)}>
                     <Share2 className="mr-2 h-4 w-4" />
                     Share
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={(e) => handleExportClick(conv, e)}>
+                    <FileDown className="mr-2 h-4 w-4" />
+                    Export
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
@@ -300,6 +361,47 @@ export function ConversationList({ conversations: initialConversations }: Conver
               disabled={isLoading}
             >
               {isLoading ? 'Deleting...' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Export Dialog */}
+      <Dialog open={isExportDialogOpen} onOpenChange={setIsExportDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Export Conversation</DialogTitle>
+            <DialogDescription>
+              Choose a format to export &quot;{selectedConversation?.title}&quot;.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 py-4">
+            <Button
+              variant="outline"
+              onClick={() => handleExport('txt')}
+              disabled={isLoading}
+              className="justify-start"
+            >
+              <FileDown className="mr-2 h-4 w-4" />
+              Export as Text (.txt)
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => handleExport('md')}
+              disabled={isLoading}
+              className="justify-start"
+            >
+              <FileDown className="mr-2 h-4 w-4" />
+              Export as Markdown (.md)
+            </Button>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsExportDialogOpen(false)}
+              disabled={isLoading}
+            >
+              Cancel
             </Button>
           </DialogFooter>
         </DialogContent>
